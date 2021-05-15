@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import random
 import csv
+import cv2
 
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
@@ -18,6 +19,96 @@ import skimage.color
 import skimage
 
 from PIL import Image
+
+import albumentations as A
+
+# transforms = A.Compose([
+#     A.CenterCrop(1280,1280, True,1),
+# ], p=1.0, bbox_params=A.BboxParams(format='pascal_voc', min_area=0, min_visibility=0.99, label_fields=['labels'])) 
+
+def switch_image(img) :
+    h, w = img.shape[:2]
+    if (h, w) == (4032, 1960) or (h, w) == (4000, 1800) :
+        img = np.flip(img, 1)
+        img = np.transpose(img, (1, 0, 2))      
+    return img
+
+transforms = A.Compose([
+#     A.RandomCrop(width=450, height=450),
+#     A.HorizontalFlip(p=1),
+    A.CenterCrop(1280,1280, True,1),
+#    A.RandomSizedBBoxSafeCrop(384, 384),
+    A.Resize(640, 640, p=1),
+    A.HorizontalFlip(p=0.5),
+    A.VerticalFlip(p=0.5),
+    A.RandomRotate90(p=0.5),
+    A.RandomRain(p=0.1),
+    A.pytorch.ToTensor(),
+# ], p=1.0, bbox_params=A.BboxParams(format='pascal_voc', min_area=0, min_visibility=0.5))
+], p=1.0, bbox_params=A.BboxParams(format='pascal_voc', min_area=0, min_visibility=0.99, label_fields=['labels']))
+
+val_transforms = A.Compose([
+    A.CenterCrop(1280,1280, True,1),
+    A.Resize(640, 640, p=1),
+    A.pytorch.ToTensor(),
+], p=1.0, bbox_params=A.BboxParams(format='pascal_voc', min_area=0, min_visibility=0.99, label_fields=['labels']))
+
+def collate_fn(batch):
+    return tuple(zip(*batch))
+
+class PapsDataset(Dataset) :
+    def __init__(self,image_info,transforms=None):
+        self.images_info = image_info
+        self.transforms = transforms
+        self.image_list = list(image_info.keys())
+        
+    def __len__(self) -> int:
+        return len(self.image_list)        
+    
+    def __getitem__(self,index):
+
+        path = self.image_list[index]
+        image = cv2.imread(path, cv2.IMREAD_COLOR)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)
+        image = switch_image(image)
+        image /= 127.5
+        image -= 1
+              
+        # DETR takes in data in coco format 
+        value = self.images_info[path]
+        boxes = value[:,1:5] 
+        labels = value[:, 5]
+
+        if self.transforms:
+            sample = {
+                'image': image,
+                'bboxes': boxes,
+                'labels': labels
+            }
+            sample = self.transforms(**sample)
+            image  = sample['image']
+            boxes  = sample['bboxes']
+            labels = sample['labels']
+
+        _,h,w = image.shape
+#         boxes = A.augmentations.bbox_utils.normalize_bboxes(sample['bboxes'],rows=h,cols=w)
+        
+        ## detr uses center_x,center_y,width,height !!
+        if len(boxes)>0:
+            boxes = np.array(boxes)
+#             boxes[:,2:] = (boxes[:,2:] - boxes[:,:2])
+#             boxes[:,:2] += (boxes[:,2:]/2)
+        else:
+            boxes = np.zeros((0,4))
+    
+        target = {}
+        target['boxes'] = torch.as_tensor(boxes,dtype=torch.float32)
+        target['labels'] = torch.as_tensor(labels, dtype=torch.int64)
+        info = torch.cat([target['boxes'],torch.unsqueeze(target['labels'], dim=1)], axis=1)
+        
+#        target['image_path'] = torch.tensor([path])
+        
+        return image, target, path, info   
 
 
 class CocoDataset(Dataset):

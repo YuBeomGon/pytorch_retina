@@ -5,6 +5,8 @@ import torch.nn as nn
 def calc_iou(a, b):
     area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
 
+#     print(torch.min(torch.unsqueeze(a[:, 2], dim=1), b[:, 2]))
+#     print(torch.max(torch.unsqueeze(a[:, 0], 1), b[:, 0]))
     iw = torch.min(torch.unsqueeze(a[:, 2], dim=1), b[:, 2]) - torch.max(torch.unsqueeze(a[:, 0], 1), b[:, 0])
     ih = torch.min(torch.unsqueeze(a[:, 3], dim=1), b[:, 3]) - torch.max(torch.unsqueeze(a[:, 1], 1), b[:, 1])
 
@@ -22,9 +24,13 @@ def calc_iou(a, b):
     return IoU
 
 class FocalLoss(nn.Module):
-    #def __init__(self):
+    def __init__(self,device):
+        super(FocalLoss, self).__init__()
+        self.device = device
 
     def forward(self, classifications, regressions, anchors, annotations):
+#         classifications, regressions = inputs
+#         anchors, annotations = targets
         alpha = 0.25
         gamma = 2.0
         batch_size = classifications.shape[0]
@@ -43,14 +49,15 @@ class FocalLoss(nn.Module):
             classification = classifications[j, :, :]
             regression = regressions[j, :, :]
 
-            bbox_annotation = annotations[j, :, :]
+#             bbox_annotation = annotations[j, :, :]
+            bbox_annotation = annotations[j]
             bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
 
             classification = torch.clamp(classification, 1e-4, 1.0 - 1e-4)
 
             if bbox_annotation.shape[0] == 0:
                 if torch.cuda.is_available():
-                    alpha_factor = torch.ones(classification.shape).cuda() * alpha
+                    alpha_factor = torch.ones(classification.shape).to(self.device) * alpha
 
                     alpha_factor = 1. - alpha_factor
                     focal_weight = classification
@@ -61,7 +68,7 @@ class FocalLoss(nn.Module):
                     # cls_loss = focal_weight * torch.pow(bce, gamma)
                     cls_loss = focal_weight * bce
                     classification_losses.append(cls_loss.sum())
-                    regression_losses.append(torch.tensor(0).float().cuda())
+                    regression_losses.append(torch.tensor(0).float().to(self.device))
 
                 else:
                     alpha_factor = torch.ones(classification.shape) * alpha
@@ -90,7 +97,7 @@ class FocalLoss(nn.Module):
             targets = torch.ones(classification.shape) * -1
 
             if torch.cuda.is_available():
-                targets = targets.cuda()
+                targets = targets.to(self.device)
 
             targets[torch.lt(IoU_max, 0.4), :] = 0
 
@@ -104,7 +111,7 @@ class FocalLoss(nn.Module):
             targets[positive_indices, assigned_annotations[positive_indices, 4].long()] = 1
 
             if torch.cuda.is_available():
-                alpha_factor = torch.ones(targets.shape).cuda() * alpha
+                alpha_factor = torch.ones(targets.shape).to(self.device) * alpha
             else:
                 alpha_factor = torch.ones(targets.shape) * alpha
 
@@ -118,7 +125,7 @@ class FocalLoss(nn.Module):
             cls_loss = focal_weight * bce
 
             if torch.cuda.is_available():
-                cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros(cls_loss.shape).cuda())
+                cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros(cls_loss.shape).to(self.device))
             else:
                 cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros(cls_loss.shape))
 
@@ -152,7 +159,7 @@ class FocalLoss(nn.Module):
                 targets = targets.t()
 
                 if torch.cuda.is_available():
-                    targets = targets/torch.Tensor([[0.1, 0.1, 0.2, 0.2]]).cuda()
+                    targets = targets/torch.Tensor([[0.1, 0.1, 0.2, 0.2]]).to(self.device)
                 else:
                     targets = targets/torch.Tensor([[0.1, 0.1, 0.2, 0.2]])
 
@@ -168,7 +175,7 @@ class FocalLoss(nn.Module):
                 regression_losses.append(regression_loss.mean())
             else:
                 if torch.cuda.is_available():
-                    regression_losses.append(torch.tensor(0).float().cuda())
+                    regression_losses.append(torch.tensor(0).float().to(self.device))
                 else:
                     regression_losses.append(torch.tensor(0).float())
 

@@ -81,11 +81,11 @@ class Bottleneck(nn.Module):
 
 class BBoxTransform(nn.Module):
 
-    def __init__(self, mean=None, std=None):
+    def __init__(self, device, mean=None, std=None):
         super(BBoxTransform, self).__init__()
         if mean is None:
             if torch.cuda.is_available():
-                self.mean = torch.from_numpy(np.array([0, 0, 0, 0]).astype(np.float32)).cuda()
+                self.mean = torch.from_numpy(np.array([0, 0, 0, 0]).astype(np.float32)).to(device)
             else:
                 self.mean = torch.from_numpy(np.array([0, 0, 0, 0]).astype(np.float32))
 
@@ -93,7 +93,7 @@ class BBoxTransform(nn.Module):
             self.mean = mean
         if std is None:
             if torch.cuda.is_available():
-                self.std = torch.from_numpy(np.array([0.1, 0.1, 0.2, 0.2]).astype(np.float32)).cuda()
+                self.std = torch.from_numpy(np.array([0.1, 0.1, 0.2, 0.2]).astype(np.float32)).to(device)
             else:
                 self.std = torch.from_numpy(np.array([0.1, 0.1, 0.2, 0.2]).astype(np.float32))
         else:

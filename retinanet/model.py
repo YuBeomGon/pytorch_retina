@@ -154,7 +154,7 @@ class ClassificationModel(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, num_classes, block, layers):
+    def __init__(self, num_classes, block, layers, device):
         self.inplanes = 64
         super(ResNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -165,6 +165,7 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
+        self.device = device
 
         if block == BasicBlock:
             fpn_sizes = [self.layer2[layers[1] - 1].conv2.out_channels, self.layer3[layers[2] - 1].conv2.out_channels,
@@ -182,11 +183,11 @@ class ResNet(nn.Module):
 
         self.anchors = Anchors()
 
-        self.regressBoxes = BBoxTransform()
+        self.regressBoxes = BBoxTransform(device=self.device)
 
         self.clipBoxes = ClipBoxes()
 
-        self.focalLoss = losses.FocalLoss()
+#         self.focalLoss = losses.FocalLoss(self.device)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -252,12 +253,18 @@ class ResNet(nn.Module):
         classification = torch.cat([self.classificationModel(feature) for feature in features], dim=1)
 
         anchors = self.anchors(img_batch)
+        anchors = anchors.to(self.device)
+#         print(anchors.shape)
+#         print(regression.shape)
+#         print(classification.shape)
 
         if self.training:
-            return self.focalLoss(classification, regression, anchors, annotations)
+#             return self.focalLoss(classification, regression, anchors, annotations)
+            return classification, regression, anchors, annotations
         else:
             transformed_anchors = self.regressBoxes(anchors, regression)
             transformed_anchors = self.clipBoxes(transformed_anchors, img_batch)
+            print(transformed_anchors.shape)
 
             finalResult = [[], [], []]
 
@@ -266,21 +273,25 @@ class ResNet(nn.Module):
             finalAnchorBoxesCoordinates = torch.Tensor([])
 
             if torch.cuda.is_available():
-                finalScores = finalScores.cuda()
-                finalAnchorBoxesIndexes = finalAnchorBoxesIndexes.cuda()
-                finalAnchorBoxesCoordinates = finalAnchorBoxesCoordinates.cuda()
+                finalScores = finalScores.to(self.device)
+                finalAnchorBoxesIndexes = finalAnchorBoxesIndexes.to(self.device)
+                finalAnchorBoxesCoordinates = finalAnchorBoxesCoordinates.to(self.device)
 
             for i in range(classification.shape[2]):
                 scores = torch.squeeze(classification[:, :, i])
+#                 print(scores.shape)
                 scores_over_thresh = (scores > 0.05)
                 if scores_over_thresh.sum() == 0:
                     # no boxes to NMS, just continue
                     continue
 
                 scores = scores[scores_over_thresh]
+#                 print(scores.shape)
                 anchorBoxes = torch.squeeze(transformed_anchors)
                 anchorBoxes = anchorBoxes[scores_over_thresh]
+#                 print(anchorBoxes.shape)
                 anchors_nms_idx = nms(anchorBoxes, scores, 0.5)
+#                 print(scores[anchors_nms_idx].shape)
 
                 finalResult[0].extend(scores[anchors_nms_idx])
                 finalResult[1].extend(torch.tensor([i] * anchors_nms_idx.shape[0]))
@@ -289,7 +300,7 @@ class ResNet(nn.Module):
                 finalScores = torch.cat((finalScores, scores[anchors_nms_idx]))
                 finalAnchorBoxesIndexesValue = torch.tensor([i] * anchors_nms_idx.shape[0])
                 if torch.cuda.is_available():
-                    finalAnchorBoxesIndexesValue = finalAnchorBoxesIndexesValue.cuda()
+                    finalAnchorBoxesIndexesValue = finalAnchorBoxesIndexesValue.to(self.device)
 
                 finalAnchorBoxesIndexes = torch.cat((finalAnchorBoxesIndexes, finalAnchorBoxesIndexesValue))
                 finalAnchorBoxesCoordinates = torch.cat((finalAnchorBoxesCoordinates, anchorBoxes[anchors_nms_idx]))
@@ -298,56 +309,56 @@ class ResNet(nn.Module):
 
 
 
-def resnet18(num_classes, pretrained=False, **kwargs):
+def resnet18(num_classes, device, pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(num_classes, BasicBlock, [2, 2, 2, 2], **kwargs)
+    model = ResNet(num_classes, BasicBlock, [2, 2, 2, 2], device=device, **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet18'], model_dir='.'), strict=False)
     return model
 
 
-def resnet34(num_classes, pretrained=False, **kwargs):
+def resnet34(num_classes, device, pretrained=False, **kwargs):
     """Constructs a ResNet-34 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(num_classes, BasicBlock, [3, 4, 6, 3], **kwargs)
+    model = ResNet(num_classes, BasicBlock, [3, 4, 6, 3], device=device, **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet34'], model_dir='.'), strict=False)
     return model
 
 
-def resnet50(num_classes, pretrained=False, **kwargs):
+def resnet50(num_classes, device, pretrained=False, **kwargs):
     """Constructs a ResNet-50 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(num_classes, Bottleneck, [3, 4, 6, 3], **kwargs)
+    model = ResNet(num_classes, Bottleneck, [3, 4, 6, 3], device=device, **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet50'], model_dir='.'), strict=False)
     return model
 
 
-def resnet101(num_classes, pretrained=False, **kwargs):
+def resnet101(num_classes, device, pretrained=False, **kwargs):
     """Constructs a ResNet-101 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(num_classes, Bottleneck, [3, 4, 23, 3], **kwargs)
+    model = ResNet(num_classes, Bottleneck, [3, 4, 23, 3], device=device, **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet101'], model_dir='.'), strict=False)
     return model
 
 
-def resnet152(num_classes, pretrained=False, **kwargs):
+def resnet152(num_classes, device, pretrained=False, **kwargs):
     """Constructs a ResNet-152 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(num_classes, Bottleneck, [3, 8, 36, 3], **kwargs)
+    model = ResNet(num_classes, Bottleneck, [3, 8, 36, 3], device=device, **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet152'], model_dir='.'), strict=False)
     return model
