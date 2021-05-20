@@ -9,6 +9,7 @@ import os
 import json
 import xml.etree.ElementTree as ET
 import glob
+from .paps import *
 
 START_BOUNDING_BOX_ID = 1
 PRE_DEFINE_CATEGORIES = None
@@ -64,7 +65,10 @@ def get_categories(xml_files):
         tree = ET.parse(xml_file)
         root = tree.getroot()
         for member in root.findall("object"):
-            classes_names.append(member[0].text)
+            cls_name = member[0].text
+            if cls_name not in rej_table :
+                class_name = replace_table[cls_name]
+                classes_names.append(class_name)
     classes_names = list(set(classes_names))
     classes_names.sort()
     return {name: i for i, name in enumerate(classes_names)}
@@ -76,6 +80,7 @@ def convert(xml_files, img_files, json_file):
         categories = PRE_DEFINE_CATEGORIES
     else:
         categories = get_categories(xml_files)
+#     print(categories)
     bnd_id = START_BOUNDING_BOX_ID
     for xml_file, img_file in zip(xml_files, img_files):
         tree = ET.parse(xml_file)
@@ -106,9 +111,12 @@ def convert(xml_files, img_files, json_file):
         #  assert segmented == '0'
         for obj in get(root, "object"):
             category = get_and_check(obj, "name", 1).text
-            if category not in categories:
-                new_id = len(categories)
-                categories[category] = new_id
+            if category in rej_table :
+                continue
+            category = replace_table[category]
+#             if category not in categories:
+#                 new_id = len(categories)
+#                 categories[category] = new_id
             category_id = categories[category]
             bndbox = get_and_check(obj, "bndbox", 1)
             xmin = int(get_and_check(bndbox, "xmin", 1).text) - 1
@@ -132,6 +140,7 @@ def convert(xml_files, img_files, json_file):
             json_dict["annotations"].append(ann)
             bnd_id = bnd_id + 1
 
+    print(categories)
     for cate, cid in categories.items():
         cat = {"supercategory": "none", "id": cid, "name": cate}
         json_dict["categories"].append(cat)
