@@ -33,7 +33,7 @@ def switch_image(img) :
         img = np.transpose(img, (1, 0, 2))      
     return img
 
-transforms = A.Compose([
+train_transforms = A.Compose([
 #     A.RandomCrop(width=450, height=450),
 #     A.HorizontalFlip(p=1),
     A.CenterCrop(1280,1280, True,1),
@@ -56,7 +56,7 @@ val_transforms = A.Compose([
 def collate_fn(batch):
     return tuple(zip(*batch))
 
-class PapsDataset(Dataset) :
+class PapsDatasetPascal(Dataset) :
     def __init__(self,image_info,transforms=None):
         self.images_info = image_info
         self.transforms = transforms
@@ -152,7 +152,6 @@ class CocoDataset(Dataset):
         return len(self.image_ids)
 
     def __getitem__(self, idx):
-
         img = self.load_image(idx)
         annot = self.load_annotations(idx)
         sample = {'img': img, 'annot': annot}
@@ -213,6 +212,40 @@ class CocoDataset(Dataset):
     def num_classes(self):
         return 80
 
+class PapsDataset(CocoDataset) :
+    def __init__(self, root_dir, set_name='train2017', transform=None):
+        super(PapsDataset, self).__init__(root_dir, set_name=set_name, transform=transform)
+        
+    def __getitem__(self, idx):
+        image = self.load_image(idx)
+        image = switch_image(image)
+        annot = self.load_annotations(idx)
+#         boxes = annot[:,:]
+        boxes = annot[:,:4] 
+        labels = annot[:, 4]    
+#         sample = {'img': img, 'annot': annot}
+
+        if self.transform:
+            sample = {
+                'image': image,
+                'bboxes': boxes,
+                'labels': labels
+            }
+            sample = self.transform(**sample)
+            
+            image  = sample['image']
+            boxes  = sample['bboxes']
+            labels = sample['labels']
+            
+        target = {}
+        target['boxes'] = torch.as_tensor(boxes,dtype=torch.float32)
+        target['labels'] = torch.as_tensor(labels, dtype=torch.int64)
+        info = torch.cat([target['boxes'],torch.unsqueeze(target['labels'], dim=1)], axis=1)            
+                  
+
+        return  image, boxes, labels, info
+    def num_classes(self):
+        return 5   
 
 class CSVDataset(Dataset):
     """CSV dataset."""

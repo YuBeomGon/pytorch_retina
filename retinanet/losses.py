@@ -51,7 +51,12 @@ class FocalLoss(nn.Module):
 
 #             bbox_annotation = annotations[j, :, :]
             bbox_annotation = annotations[j]
-            bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
+            
+            if len(bbox_annotation) == 0 :
+#                 pass
+                print('No Bounding Box found {}'.format(bbox_annotation))
+            else :
+                bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
 
             classification = torch.clamp(classification, 1e-4, 1.0 - 1e-4)
 
