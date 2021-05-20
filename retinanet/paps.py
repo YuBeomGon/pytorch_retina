@@ -79,6 +79,16 @@ replace_table = {
     'Carcinoma' : 'Carcinoma',
 }
 
+replace_table_2Class = { 
+    'Normal' : 'Normal',
+    'Abnormal' : 'Abnormal',
+    'HSIL' : 'Abnormal',
+    'LSIL' : 'Abnormal',
+    
+    'ASCUS' : 'Abnormal',
+    'Carcinoma' : 'Abnormal',
+}
+
 # 사용 안할 이미지 크기
 rej_size = [
     (3024, 4032)

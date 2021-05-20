@@ -68,6 +68,7 @@ def get_categories(xml_files):
             cls_name = member[0].text
             if cls_name not in rej_table :
                 class_name = replace_table[cls_name]
+                class_name = replace_table_2Class[class_name]
                 classes_names.append(class_name)
     classes_names = list(set(classes_names))
     classes_names.sort()
@@ -114,6 +115,7 @@ def convert(xml_files, img_files, json_file):
             if category in rej_table :
                 continue
             category = replace_table[category]
+            category = replace_table_2Class[category]
 #             if category not in categories:
 #                 new_id = len(categories)
 #                 categories[category] = new_id

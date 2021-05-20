@@ -53,8 +53,8 @@ class FocalLoss(nn.Module):
             bbox_annotation = annotations[j]
             
             if len(bbox_annotation) == 0 :
-#                 pass
-                print('No Bounding Box found {}'.format(bbox_annotation))
+                pass
+#                 print('No Bounding Box found {}'.format(bbox_annotation))
             else :
                 bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
 
