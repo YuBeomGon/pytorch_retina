@@ -38,7 +38,7 @@ train_transforms = A.Compose([
 #     A.HorizontalFlip(p=1),
     A.CenterCrop(1280,1280, True,1),
 #    A.RandomSizedBBoxSafeCrop(384, 384),
-    A.Resize(640, 640, p=1),
+    A.Resize(320, 320, p=1),
     A.HorizontalFlip(p=0.5),
     A.VerticalFlip(p=0.5),
     A.RandomRotate90(p=0.5),
@@ -49,7 +49,7 @@ train_transforms = A.Compose([
 
 val_transforms = A.Compose([
     A.CenterCrop(1280,1280, True,1),
-    A.Resize(640, 640, p=1),
+    A.Resize(320, 320, p=1),
     A.pytorch.ToTensor(),
 ], p=1.0, bbox_params=A.BboxParams(format='pascal_voc', min_area=0, min_visibility=0.99, label_fields=['labels']))
 
