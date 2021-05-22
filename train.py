@@ -14,6 +14,13 @@ from torch.utils.data import DataLoader
 
 from retinanet import coco_eval
 from retinanet import csv_eval
+from retinanet.scheduler import *
+from retinanet.losses import *
+from retinanet.dataloader import *
+from retinanet.anchors import Anchors
+
+import albumentations as A
+import albumentations.pytorch
 
 assert torch.__version__.split('.')[0] == '1'
 
@@ -30,9 +37,18 @@ def main(args=None):
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
 
     parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
-    parser.add_argument('--epochs', help='Number of epochs', type=int, default=100)
+    parser.add_argument('--epochs', help='Number of epochs', type=int, default=150)
+    parser.add_argument('--gpu_num', help='default gpu', type=int, default=5) 
 
     parser = parser.parse_args(args)
+    
+    # GPU 할당 변경하기
+    GPU_NUM = parser.gpu_num
+    device = torch.device(f'cuda:{GPU_NUM}' if torch.cuda.is_available() else 'cpu')
+    torch.cuda.set_device(device) # change allocation of current GPU
+    print(device)
+    print ('Current cuda device ', torch.cuda.current_device()) # check
+    device_ids = [5,4,3,1,7]    
 
     # Create the data loaders
     if parser.dataset == 'coco':
@@ -66,8 +82,8 @@ def main(args=None):
     else:
         raise ValueError('Dataset type not understood (must be csv or coco), exiting.')
 
-    sampler = AspectRatioBasedSampler(dataset_train, batch_size=2, drop_last=False)
-    dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater, batch_sampler=sampler)
+    sampler = AspectRatioBasedSampler(dataset_train, batch_size=8, drop_last=False)
+    dataloader_train = DataLoader(dataset_train, num_workers=8, collate_fn=collater, batch_sampler=sampler)
 
     if dataset_val is not None:
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=False)
@@ -75,15 +91,15 @@ def main(args=None):
 
     # Create the model
     if parser.depth == 18:
-        retinanet = model.resnet18(num_classes=dataset_train.num_classes(), pretrained=True)
+        retinanet = model.resnet18(num_classes=dataset_train.num_classes(), device=device, pretrained=True)
     elif parser.depth == 34:
-        retinanet = model.resnet34(num_classes=dataset_train.num_classes(), pretrained=True)
+        retinanet = model.resnet34(num_classes=dataset_train.num_classes(),  device=device, pretrained=True)
     elif parser.depth == 50:
-        retinanet = model.resnet50(num_classes=dataset_train.num_classes(), pretrained=True)
+        retinanet = model.resnet50(num_classes=dataset_train.num_classes(), device=device, pretrained=True)
     elif parser.depth == 101:
-        retinanet = model.resnet101(num_classes=dataset_train.num_classes(), pretrained=True)
+        retinanet = model.resnet101(num_classes=dataset_train.num_classes(), device=device, pretrained=True)
     elif parser.depth == 152:
-        retinanet = model.resnet152(num_classes=dataset_train.num_classes(), pretrained=True)
+        retinanet = model.resnet152(num_classes=dataset_train.num_classes(), device=device, pretrained=True)
     else:
         raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
 
@@ -91,18 +107,22 @@ def main(args=None):
 
     if use_gpu:
         if torch.cuda.is_available():
-            retinanet = retinanet.cuda()
+            retinanet = retinanet.to(device)
 
     if torch.cuda.is_available():
-        retinanet = torch.nn.DataParallel(retinanet).cuda()
+        retinanet = torch.nn.DataParallel(retinanet, device_ids = [5,4,3,1,7], output_device=GPU_NUM).to(device)
     else:
         retinanet = torch.nn.DataParallel(retinanet)
 
     retinanet.training = True
 
-    optimizer = optim.Adam(retinanet.parameters(), lr=1e-5)
-
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
+#     optimizer = optim.Adam(retinanet.parameters(), lr=1e-5)
+#     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
+    criterion = FocalLoss(device)
+    criterion = criterion.to(device)
+    
+    optimizer = optim.Adam(retinanet.parameters(), lr = 1e-7)
+    scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=30, T_mult=2, eta_max=0.0004,  T_up=10, gamma=0.5)    
 
     loss_hist = collections.deque(maxlen=500)
 
@@ -118,14 +138,18 @@ def main(args=None):
 
         epoch_loss = []
 
+        start_time = time.time()
         for iter_num, data in enumerate(dataloader_train):
             try:
                 optimizer.zero_grad()
 
                 if torch.cuda.is_available():
-                    classification_loss, regression_loss = retinanet([data['img'].cuda().float(), data['annot']])
+                    outputs = retinanet([data['img'].to(device).float(), data['annot']])
                 else:
-                    classification_loss, regression_loss = retinanet([data['img'].float(), data['annot']])
+                    outputs = retinanet([data['img'].float(), data['annot']])
+                    
+                classification, regression, anchors, annotations = (outputs)
+                classification_loss, regression_loss = criterion(classification, regression, anchors, annotations)                    
                     
                 classification_loss = classification_loss.mean()
                 regression_loss = regression_loss.mean()
@@ -144,16 +168,18 @@ def main(args=None):
                 loss_hist.append(float(loss))
 
                 epoch_loss.append(float(loss))
-
-                print(
-                    'Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(
-                        epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
+                if iter_num%100 == 0 :
+                    print(
+                        'Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(
+                            epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
 
                 del classification_loss
                 del regression_loss
             except Exception as e:
                 print(e)
                 continue
+                
+        print('epoch time :', time.time() - start_time)
 
         if parser.dataset == 'coco':
 
