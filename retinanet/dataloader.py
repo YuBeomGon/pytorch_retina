@@ -21,6 +21,7 @@ import skimage
 from PIL import Image
 
 import albumentations as A
+import albumentations.pytorch
 
 # transforms = A.Compose([
 #     A.CenterCrop(1280,1280, True,1),
@@ -162,7 +163,7 @@ class CocoDataset(Dataset):
 
     def load_image(self, image_index):
         image_info = self.coco.loadImgs(self.image_ids[image_index])[0]
-        path       = os.path.join(self.root_dir, 'images', self.set_name, image_info['file_name'])
+        path       = os.path.join(self.root_dir, self.set_name, image_info['file_name'])
         img = skimage.io.imread(path)
 
         if len(img.shape) == 2:
