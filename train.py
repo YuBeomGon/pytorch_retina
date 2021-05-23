@@ -21,6 +21,8 @@ from retinanet.anchors import Anchors
 
 import albumentations as A
 import albumentations.pytorch
+import time
+import tqdm
 
 assert torch.__version__.split('.')[0] == '1'
 
@@ -39,6 +41,7 @@ def main(args=None):
     parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=150)
     parser.add_argument('--gpu_num', help='default gpu', type=int, default=5) 
+    parser.add_argument('--saved_dir', help='saved dir', default='trained_models/coco/resnet50/') 
 
     parser = parser.parse_args(args)
     
@@ -116,13 +119,13 @@ def main(args=None):
 
     retinanet.training = True
 
-#     optimizer = optim.Adam(retinanet.parameters(), lr=1e-5)
-#     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
+    optimizer = optim.Adam(retinanet.parameters(), lr=1e-5)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
     criterion = FocalLoss(device)
     criterion = criterion.to(device)
     
-    optimizer = optim.Adam(retinanet.parameters(), lr = 1e-7)
-    scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=30, T_mult=2, eta_max=0.0004,  T_up=10, gamma=0.5)    
+#     optimizer = optim.Adam(retinanet.parameters(), lr = 1e-7)
+#     scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=30, T_mult=2, eta_max=0.0004,  T_up=10, gamma=0.5)    
 
     loss_hist = collections.deque(maxlen=500)
 
@@ -137,9 +140,10 @@ def main(args=None):
         retinanet.module.freeze_bn()
 
         epoch_loss = []
+        loss_per_epoch = 2
 
         start_time = time.time()
-        for iter_num, data in enumerate(dataloader_train):
+        for iter_num, data in enumerate((dataloader_train)):
             try:
                 optimizer.zero_grad()
 
@@ -168,7 +172,7 @@ def main(args=None):
                 loss_hist.append(float(loss))
 
                 epoch_loss.append(float(loss))
-                if iter_num%100 == 0 :
+                if iter_num%500 == 0 :
                     print(
                         'Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(
                             epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
@@ -180,6 +184,10 @@ def main(args=None):
                 continue
                 
         print('epoch time :', time.time() - start_time)
+        if loss_per_epoch > np.mean(loss_hist):
+            print('best model is saved')
+            torch.save(retinanet.state_dict(), parser.saved_dir + 'best_model.pt')
+            loss_per_epoch = np.mean(loss_hist)  
 
         if parser.dataset == 'coco':
 
