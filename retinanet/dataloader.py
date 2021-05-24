@@ -246,7 +246,7 @@ class PapsDataset(CocoDataset) :
 
         return  image, boxes, labels, info
     def num_classes(self):
-        return 5   
+        return 2  
 
 class CSVDataset(Dataset):
     """CSV dataset."""

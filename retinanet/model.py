@@ -64,6 +64,50 @@ class PyramidFeatures(nn.Module):
 
         return [P3_x, P4_x, P5_x, P6_x, P7_x]
 
+class ResidualAfterFPN(nn.Module):
+    def __init__(self, num_features_in=256, feature_size=256):
+        super(ResidualAfterFPN, self).__init__()  
+        print('num_features_in of ResidualAfterFPN :', num_features_in)  
+        self.intermediatechannel = int(feature_size/4)
+        self.conv1 = nn.Conv2d(num_features_in, self.intermediatechannel, kernel_size=1, stride=1, padding=0)
+        self.bn1 = nn.BatchNorm2d(self.intermediatechannel)
+        self.act1 = nn.ReLU()
+        
+        # self.conv2 = nn.Conv2d(self.intermediatechannel, self.intermediatechannel, kernel_size=3, stride=1, padding=1)
+        # self.bn2 = nn.BatchNorm2d(self.intermediatechannel)
+        # self.act2 = nn.ReLU()
+
+        self.conv3 = nn.Conv2d(self.intermediatechannel, self.intermediatechannel, kernel_size=3, stride=1, padding=1)
+        self.bn3 = nn.BatchNorm2d(self.intermediatechannel)
+        self.act3 = nn.ReLU()     
+
+        self.conv4 = nn.Conv2d(self.intermediatechannel, feature_size, kernel_size=1, stride=1, padding=0)
+        self.bn4 = nn.BatchNorm2d(feature_size)   
+
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, input) : 
+
+        skipped = input
+        out = self.conv1(input)
+        out = self.bn1(out)
+        out = self.act1(out)
+
+        # out = self.conv2(out)
+        # out = self.bn2(out)
+        # out = self.act2(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+        out = self.act3(out)
+
+        out = self.conv4(out)
+        out = self.bn4(out)
+
+        out += skipped
+        out = self.relu(out)    
+
+        return out       
 
 class RegressionModel(nn.Module):
     def __init__(self, num_features_in, num_anchors=9, feature_size=256):
@@ -151,7 +195,6 @@ class ClassificationModel(nn.Module):
 
         return out2.contiguous().view(x.shape[0], -1, self.num_classes)
 
-
 class ResNet(nn.Module):
 
     def __init__(self, num_classes, block, layers, device):
@@ -177,6 +220,7 @@ class ResNet(nn.Module):
             raise ValueError(f"Block type {block} not understood")
 
         self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2])
+        self.residualafterFPN = ResidualAfterFPN()       
 
         self.regressionModel = RegressionModel(256)
         self.classificationModel = ClassificationModel(256, num_classes=num_classes)
@@ -228,6 +272,15 @@ class ResNet(nn.Module):
         for layer in self.modules():
             if isinstance(layer, nn.BatchNorm2d):
                 layer.eval()
+            
+    def freeze_ex_bn(self, req_gra) :
+        for n, p in self.named_parameters():
+            #print(n)
+            if 'bn' not in n :
+                if 'fpn' not in n and 'residualafterFPN' not in n and 'regressionModel' not in n and 'classificationModel' not in n :
+                    #print(param)
+                    #print(n)
+                    p.requires_grad = req_gra
 
     def forward(self, inputs):
 
@@ -247,6 +300,8 @@ class ResNet(nn.Module):
         x4 = self.layer4(x3)
 
         features = self.fpn([x2, x3, x4])
+        
+        features = [self.residualafterFPN(feature) for feature in features] 
 
         regression = torch.cat([self.regressionModel(feature) for feature in features], dim=1)
 
@@ -262,6 +317,8 @@ class ResNet(nn.Module):
 #             return self.focalLoss(classification, regression, anchors, annotations)
             return classification, regression, anchors, annotations
         else:
+#             print(anchors)
+#             print(regression)
             transformed_anchors = self.regressBoxes(anchors, regression)
             transformed_anchors = self.clipBoxes(transformed_anchors, img_batch)
 #             print(transformed_anchors.shape)
@@ -277,6 +334,7 @@ class ResNet(nn.Module):
                 finalAnchorBoxesIndexes = finalAnchorBoxesIndexes.to(self.device)
                 finalAnchorBoxesCoordinates = finalAnchorBoxesCoordinates.to(self.device)
 
+                
             for i in range(classification.shape[2]):
                 scores = torch.squeeze(classification[:, :, i])
 #                 print(scores.shape)
