@@ -62,7 +62,8 @@ class PyramidFeatures(nn.Module):
         P7_x = self.P7_1(P6_x)
         P7_x = self.P7_2(P7_x)
 
-        return [P3_x, P4_x, P5_x, P6_x, P7_x]
+#         return [P3_x, P4_x, P5_x, P6_x, P7_x]
+        return [P3_x, P4_x, P5_x]
 
 class ResidualAfterFPN(nn.Module):
     def __init__(self, num_features_in=256, feature_size=256):
@@ -110,7 +111,7 @@ class ResidualAfterFPN(nn.Module):
         return out       
 
 class RegressionModel(nn.Module):
-    def __init__(self, num_features_in, num_anchors=9, feature_size=256):
+    def __init__(self, num_features_in, num_anchors=1, feature_size=256):
         super(RegressionModel, self).__init__()
 
         self.conv1 = nn.Conv2d(num_features_in, feature_size, kernel_size=3, padding=1)
@@ -149,7 +150,7 @@ class RegressionModel(nn.Module):
 
 
 class ClassificationModel(nn.Module):
-    def __init__(self, num_features_in, num_anchors=9, num_classes=80, prior=0.01, feature_size=256):
+    def __init__(self, num_features_in, num_anchors=1, num_classes=80, prior=0.01, feature_size=256):
         super(ClassificationModel, self).__init__()
 
         self.num_classes = num_classes
@@ -200,6 +201,7 @@ class ResNet(nn.Module):
     def __init__(self, num_classes, block, layers, device):
         self.inplanes = 64
         super(ResNet, self).__init__()
+        self.bn0 = nn.BatchNorm2d(3)
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
@@ -249,7 +251,7 @@ class ResNet(nn.Module):
         self.regressionModel.output.weight.data.fill_(0)
         self.regressionModel.output.bias.data.fill_(0)
 
-        self.freeze_bn()
+#         self.freeze_bn()
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -288,8 +290,8 @@ class ResNet(nn.Module):
             img_batch, annotations = inputs
         else:
             img_batch = inputs
-
-        x = self.conv1(img_batch)
+        x = self.bn0(img_batch)
+        x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
