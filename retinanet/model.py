@@ -63,7 +63,7 @@ class PyramidFeatures(nn.Module):
         P7_x = self.P7_2(P7_x)
 
 #         return [P3_x, P4_x, P5_x, P6_x, P7_x]
-        return [P3_x, P4_x, P5_x]
+        return [P3_x]
 
 class ResidualAfterFPN(nn.Module):
     def __init__(self, num_features_in=256, feature_size=256):
@@ -311,9 +311,6 @@ class ResNet(nn.Module):
 
         anchors = self.anchors(img_batch)
         anchors = anchors.to(self.device)
-#         print(anchors.shape)
-#         print(regression.shape)
-#         print(classification.shape)
 
         if self.training:
 #             return self.focalLoss(classification, regression, anchors, annotations)
