@@ -33,15 +33,13 @@ def paps_calc_iou(a, b):
     iw = torch.clamp(iw, min=0)
     ih = torch.clamp(ih, min=0)
 
-    area_b = torch.unsqueeze((a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1]), dim=1)
-    area_b = torch.clamp(area_b, min=1e-8)
-    ua = area_b + area - iw * ih
+    ua = torch.unsqueeze((a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1]), dim=1) + area - iw * ih
     ua = torch.clamp(ua, min=1e-8)
 
     intersection = iw * ih
 
     IoU = intersection / ua
-    IoU_paps = intersection / area_b
+    IoU_paps = intersection / area
     IoU_paps = torch.clamp(IoU_paps, min=0, max=1)
     
     return (IoU + IoU_paps) / 2
@@ -281,6 +279,7 @@ class PapsLoss(FocalLoss) :
                 continue
 
             IoU = paps_calc_iou(anchors[0, :, :], bbox_annotation[:, :4]) # num_anchors x num_annotations
+            IoU = calc_iou(anchors[0, :, :], bbox_annotation[:, :4])
 
             IoU_max, IoU_argmax = torch.max(IoU, dim=1) # num_anchors x 1
 
@@ -315,7 +314,7 @@ class PapsLoss(FocalLoss) :
             alpha_factor = torch.where(torch.eq(targets, 1.), alpha_factor, 1. - alpha_factor)
             focal_weight = torch.where(torch.eq(targets, 1.), 1. - classification, classification)
 #             Use C weight based on IoU instead of alpha factor which is fixed
-            focal_weight = c_weight * torch.pow(focal_weight, self.gamma)
+            focal_weight = alpha_factor * torch.pow(focal_weight, self.gamma)
 
             bce = -(targets * torch.log(classification) + (1.0 - targets) * torch.log(1.0 - classification))
 
