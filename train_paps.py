@@ -11,16 +11,13 @@ from PIL import Image, ImageDraw, ImageEnhance
 # from tqdm.notebook import tqdm
 from tqdm import tqdm
 
-# import cv2
-# import re
-# import time
-
 import sys
 sys.path.append('../')
 from retinanet import model
 from retinanet import coco_eval
 from retinanet import paps_eval
 from retinanet import csv_eval
+from retinanet import paps_train
 
 # from retinanet import retina
 # from retinanet.paps_eval import evaluate_paps
@@ -42,47 +39,49 @@ from torch.optim import Adam, lr_scheduler
 import torch.optim as optim
 
 import torch.distributed as dist
-from apex.parallel import DistributedDataParallel as DDP
+# from apex.parallel import DistributedDataParallel as DDP
 
 from pycocotools.cocoeval import COCOeval
 import json
 import torch
+import torchvision.models as models
 
 def main(args=None):
     parser = argparse.ArgumentParser(description='Simple paps training script for training a RetinaNet network.')
     parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
-    parser.add_argument('--epochs', help='Number of epochs', type=int, default=100)
+    parser.add_argument('--epochs', help='Number of epochs', type=int, default=200)
+    parser.add_argument('--start_epoch', help='start_epoch', type=int, default=0)
+    parser.add_argument('--end_epoch', help='end_epoch', type=int, default=200)
     parser.add_argument('--batch_size', help='Number of batchs', type=int, default=64)    
     parser.add_argument('--train_data', help='train data file', default='data/train.npy')    
     parser.add_argument('--test_data', help='test data file', default='data/test.npy')   
     parser.add_argument('--saved_dir', help='saved dir', default='trained_models/resnet101_320/') 
     parser.add_argument('--gpu_num', help='default gpu', type=int, default=3) 
-    parser.add_argument('--freeze_ex_bn', help='default gpu', type=bool, default=False) 
+    parser.add_argument('--ismultigpu', help='multi gpu support', type=bool, default=False) 
+    parser.add_argument('--freeze_ex_bn', help='freeze batch norm', type=bool, default=False) 
+    parser.add_argument('--num_workers', help='cpu core', type=int, default=12) 
     
     parser = parser.parse_args(args)
     print('batch_size ', parser.batch_size)
     print('epochs ', parser.epochs)
+    print( ' start_epoch {} end_epoch {}'.format(parser.start_epoch, parser.end_epoch))
+    print('ismultigpu', parser.ismultigpu)
+    print('freeze_ex_bn', parser.freeze_ex_bn )
 
     # GPU 할당 변경하기
     GPU_NUM = parser.gpu_num
     device = torch.device(f'cuda:{GPU_NUM}' if torch.cuda.is_available() else 'cpu')
     torch.cuda.set_device(device) # change allocation of current GPU
-    print(device)
     print ('Current cuda device ', torch.cuda.current_device()) # check
-    device_ids = [3,2,1]
     
-#     PATH_TO_WEIGHTS = 'coco_resnet_50_map_0_335_state_dict.pt'
-#     pre_retinanet = model.resnet50(num_classes=80, device=device)
-#     pre_retinanet.load_state_dict(torch.load(PATH_TO_WEIGHTS, map_location=device), strict=False)
-#     pre_retinanet.classificationModel.output = nn.Conv2d(256, 9*2, kernel_size=3, padding=1)
-
+    resnet101 = models.resnet101(progress=False, pretrained=True)    
     ret_model = model.resnet101(num_classes=2, device=device)
-#     ret_model.load_state_dict(pre_retinanet.state_dict())
-#     del pre_retinanet 
+    ret_model.load_state_dict(resnet101.state_dict(), strict=False)   
     
+#     In Batch norm initial setting, set r to and set to 1 for bias for fast convergence
     state_dict = ret_model.state_dict()
     for s in state_dict:
-        if 'bn' in s :
+        if 'bn' in s and 'residualafterFPN' in s :
             if 'weight' in s :
                 shape = state_dict[s].shape
                 state_dict[s] = torch.zeros(shape)
@@ -92,16 +91,25 @@ def main(args=None):
     
     ret_model.load_state_dict(state_dict)
     
-#     if parser.freeze_ex_bn :
-#         for k, p in zip(ret_model.module.state_dict(), ret_model.module.parameters()) :
-#             if 'bn' not in k :
-#                 p.requires_grad = False  
-        
-    ret_model = torch.nn.DataParallel(ret_model, device_ids = [3,4,5], output_device=GPU_NUM).to(device)
-#     ret_model.module.freeze_ex_bn(False)
+#     criterion = FocalLoss(device)
+    criterion = PapsLoss(device)
+    criterion = criterion.to(device)
+    optimizer = optim.Adam(ret_model.parameters(), lr = 1e-7)
+    scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=20, T_mult=1, eta_max=0.0004,  T_up=5, gamma=0.5)    
+    
+    saved_dir = parser.saved_dir
+    if os.path.isfile(saved_dir+'model.pt') :
+        state = torch.load(saved_dir + 'model.pt')
+        ret_model.load_state_dict(state['state_dict'])
+        optimizer.load_state_dict(state['optimizer'])
+        last_loss = state['loss'] 
+    else :
+        last_loss = 0.6 
+    
+    if parser.ismultigpu :
+        ret_model = torch.nn.DataParallel(ret_model, device_ids = [3,4,5], output_device=GPU_NUM).to(device)
     # ret_model = DataParallelModel(ret_model, device_ids = device_ids)
     ret_model.to(device)
-    # ret_model.cuda()
 #     ret_model.module.freeze_bn()     
     
     batch_size = parser.batch_size
@@ -112,7 +120,7 @@ def main(args=None):
         dataset_train,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=32,
+        num_workers=parser.num_workers,
         pin_memory=True,
         collate_fn=collate_fn
     )
@@ -126,96 +134,26 @@ def main(args=None):
         shuffle=False,
         num_workers=4,
         collate_fn=collate_fn
-    )        
-
-    criterion = FocalLoss(device)
-    criterion = criterion.to(device)
+    )     
+    
+    s_epoch= parser.start_epoch
+    e_epoch= parser.end_epoch
     ret_model.training = True
     
-    optimizer = optim.Adam(ret_model.parameters(), lr = 1e-7)
-    scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=20, T_mult=1, eta_max=0.0004,  T_up=5, gamma=0.5)    
+    paps_train.train_paps(dataloader=train_data_loader, 
+                          model=ret_model, 
+                          criterion=criterion,
+                          saved_dir=saved_dir, 
+                          optimizer=optimizer,
+                          scheduler=scheduler,
+                          device = device,
+                          s_epoch= s_epoch,
+                          e_epoch= e_epoch,
+                          last_loss = last_loss) 
     
-    loss_per_epoch = 0.6
-    lr_list = [0.00001,0.00002,0.00004,0.00005,0.00004, 0.00003,0.00002,0.00001,0.00001,0.00001,0.00001,0.00001,0.00001]
-    for li in range(len(lr_list)) :
-        lr_list[li] = lr_list[li]*2
-        
-#     optimizer.param_groups[0]["lr"] = 0.00002
-#     paps_eval.evaluate_paps(dataset=dataset_val, 
-#                   dataloader=val_data_loader, 
-#                   model=ret_model, 
-#                   saved_dir=parser.saved_dir, 
-#                   device = device,
-#                   threshold=0.5) 
-    
-    for epoch in range(parser.epochs) :
-        if epoch < len(lr_list) :
-            optimizer.param_groups[0]["lr"] = lr_list[epoch]
-        if epoch == int(parser.epochs*0.2) :
-            ret_model.module.freeze_ex_bn(True)
-        total_loss = 0
-#         tk0 = tqdm(train_data_loader, total=len(train_data_loader), leave=False)
-        EPOCH_LEARING_RATE = optimizer.param_groups[0]["lr"]
-#         start_time = time.time()
-#         print("*****{}th epoch, learning rate {}".format(epoch, EPOCH_LEARING_RATE))
+    ret_model.training = False
+#     ret_model.eval()
 
-#         for step, data in enumerate(tk0) :
-        for step, data in enumerate(train_data_loader) :
-            if step > len(train_data_loader)/2 and epoch%10 > 0 :
-                break
-            images, box, label, targets = data
-            batch_size = len(images)
-            if step == 0 :
-                print(label[0])
-
-        #     images = list(image.to(device) for image in images)
-            c, h, w = images[0].shape
-            images = torch.cat(images).view(-1, c, h, w).to(device)
-    #         print(images.shape)
-    #         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-            targets = [ t.to(device) for t in targets]
-
-    #         classification_loss, regression_loss = ret_model([images, targets])
-            outputs = ret_model([images, targets])
-            classification, regression, anchors, annotations = (outputs)
-            classification_loss, regression_loss = criterion(classification, regression, anchors, annotations)
-
-    #         output = ret_model(images)
-    #         features, regression, classification = output
-    #         classification_loss, regression_loss = criterion(classification, regression, modified_anchors, targets)    
-            classification_loss = classification_loss.mean()
-            regression_loss = regression_loss.mean()
-            loss = classification_loss + regression_loss 
-            total_loss += loss.item()
-
-            if step == 100 :
-                print('lr {} batch_loss {} cls {} reg {} avg {}'.format(optimizer.param_groups[0]["lr"], loss.item(), classification_loss.item(), 
-                                regression_loss.item(), total_loss/(step+1)
-                ))
-
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(ret_model.parameters(), 0.02)
-            optimizer.step()   
-
-        print('{}th epochs loss is {}'.format(epoch, total_loss/(step+1)))
-        if loss_per_epoch > total_loss/(step+1):
-            print('best model is saved')
-            torch.save(ret_model.state_dict(), parser.saved_dir + 'best_model.pt')
-            loss_per_epoch = total_loss/(step+1)
-
-        scheduler.step()
-#         print('epoch training time is ', time.time() - start_time)
-#         if epoch % 20 == 0 :
-#             paps_eval.evaluate_paps(dataset=dataset_val, 
-#               dataloader=val_data_loader, 
-#               model=ret_model, 
-#               saved_dir=parser.saved_dir, 
-#               device = device,
-#               threshold=0.5)    
-#         ret_model.train()
-
-    torch.save(ret_model.state_dict(), parser.saved_dir + 'model.pt')
     paps_eval.evaluate_paps(dataset=dataset_val, 
       dataloader=val_data_loader, 
       model=ret_model, 
@@ -224,4 +162,5 @@ def main(args=None):
       threshold=0.5)  
         
 if __name__ == '__main__':
+    print(sys.argv)
     main()        
