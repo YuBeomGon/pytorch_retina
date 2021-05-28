@@ -111,6 +111,7 @@ class HourglassNet(nn.Module):
     '''Hourglass model from Newell et al ECCV 2016'''
     def __init__(self, block, num_stacks=2, num_blocks=4, num_classes=16, device='cpu'):
         super(HourglassNet, self).__init__()
+        print('num_classes', num_classes)
 
         self.inplanes = 64
         self.num_feats = 128
@@ -127,15 +128,15 @@ class HourglassNet(nn.Module):
 
         # build hourglass modules
         ch = self.num_feats*block.expansion
-        hg, res, fc, score, fc_, score_ = [], [], [], [], [], []
+        hg = []
         for i in range(num_stacks):
             hg.append(Hourglass(block, num_blocks, self.num_feats, 4))
-            res.append(self._make_residual(block, self.num_feats, num_blocks))
-            fc.append(self._make_fc(ch, ch))
-            score.append(nn.Conv2d(ch, num_classes, kernel_size=1, bias=True))
-            if i < num_stacks-1:
-                fc_.append(nn.Conv2d(ch, ch, kernel_size=1, bias=True))
-                score_.append(nn.Conv2d(num_classes, ch, kernel_size=1, bias=True))
+#             res.append(self._make_residual(block, self.num_feats, num_blocks))
+#             fc.append(self._make_fc(ch, ch))
+#             score.append(nn.Conv2d(ch, num_classes, kernel_size=1, bias=True))
+#             if i < num_stacks-1:
+#                 fc_.append(nn.Conv2d(ch, ch, kernel_size=1, bias=True))
+#                 score_.append(nn.Conv2d(num_classes, ch, kernel_size=1, bias=True))
         self.hg = nn.ModuleList(hg)
 #         self.res = nn.ModuleList(res)
 #         self.fc = nn.ModuleList(fc)
@@ -213,7 +214,6 @@ class HourglassNet(nn.Module):
         classification = self.classificationModel(y)
 
         anchors = self.anchors(images)
-#         print(anchors.shape)
         anchors = anchors.to(self.device)    
         
         if self.training:

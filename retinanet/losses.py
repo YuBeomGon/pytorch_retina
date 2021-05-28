@@ -2,9 +2,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-# def print(*argc) :
-#     pass
-
 def calc_iou(a, b):
     area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
 
@@ -52,14 +49,10 @@ class FocalLoss(nn.Module):
         self.gamma = 2.0   
 
     def forward(self, classifications, regressions, anchors, annotations, iou_threshold=0.3):
-#         classifications, regressions = inputs
-#         anchors, annotations = targets
 
         batch_size = classifications.shape[0]
         classification_losses = []
         regression_losses = []
-#         print('anchors', anchors.shape, anchors)
-#         print('annotations', annotations[0])
 
         anchor = anchors[0, :, :]
 
@@ -67,6 +60,7 @@ class FocalLoss(nn.Module):
         anchor_heights = anchor[:, 3] - anchor[:, 1]
         anchor_ctr_x   = anchor[:, 0] + 0.5 * anchor_widths
         anchor_ctr_y   = anchor[:, 1] + 0.5 * anchor_heights
+        num_detected = 0
 
         for j in range(batch_size):
 
@@ -133,6 +127,7 @@ class FocalLoss(nn.Module):
             positive_indices = torch.ge(IoU_max, iou_threshold + 0.1)
 
             num_positive_anchors = positive_indices.sum()
+            num_detected += num_positive_anchors
 
             assigned_annotations = bbox_annotation[IoU_argmax, :]
 
@@ -209,7 +204,7 @@ class FocalLoss(nn.Module):
                 else:
                     regression_losses.append(torch.tensor(0).float())
 
-        return torch.stack(classification_losses).mean(dim=0, keepdim=True), torch.stack(regression_losses).mean(dim=0, keepdim=True)
+        return torch.stack(classification_losses).mean(dim=0, keepdim=True), torch.stack(regression_losses).mean(dim=0, keepdim=True), num_detected
 
 class PapsLoss(FocalLoss) :
     def __init__(self,device):
@@ -230,6 +225,7 @@ class PapsLoss(FocalLoss) :
         anchor_heights = anchor[:, 3] - anchor[:, 1]
         anchor_ctr_x   = anchor[:, 0] + 0.5 * anchor_widths
         anchor_ctr_y   = anchor[:, 1] + 0.5 * anchor_heights
+        num_detected = 0
 
         for j in range(batch_size):
 
@@ -297,6 +293,7 @@ class PapsLoss(FocalLoss) :
             positive_indices = torch.ge(IoU_max, iou_threshold + 0.1)
 
             num_positive_anchors = positive_indices.sum()
+            num_detected += num_positive_anchors
 
             assigned_annotations = bbox_annotation[IoU_argmax, :]
 
@@ -377,4 +374,4 @@ class PapsLoss(FocalLoss) :
                 else:
                     regression_losses.append(torch.tensor(0).float())
 
-        return torch.stack(classification_losses).mean(dim=0, keepdim=True), torch.stack(regression_losses).mean(dim=0, keepdim=True)
+        return torch.stack(classification_losses).mean(dim=0, keepdim=True), torch.stack(regression_losses).mean(dim=0, keepdim=True), num_detected

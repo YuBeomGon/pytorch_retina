@@ -62,7 +62,7 @@ def train_paps(dataloader, model, saved_dir, criterion,
 
             outputs = model([images, targets])
             classification, regression, anchors, annotations = (outputs)
-            classification_loss, regression_loss = criterion(classification, regression, 
+            classification_loss, regression_loss, num_det = criterion(classification, regression, 
                                                              anchors, annotations, iou_thres,
                                                              beta)
 
@@ -75,7 +75,7 @@ def train_paps(dataloader, model, saved_dir, criterion,
 
             if step % 5 == 0:
                 tk0.set_postfix(lr=optimizer.param_groups[0]["lr"], batch_loss=loss.item(), cls_loss=classification_loss.item(), 
-                                reg_loss=regression_loss.item(), avg_loss=total_loss/(step+1))        
+                                reg_loss=regression_loss.item(), avg_loss=total_loss/(step+1), num_det=num_det)        
 
             optimizer.zero_grad()
             loss.backward()
