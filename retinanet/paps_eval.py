@@ -86,7 +86,7 @@ def evaluate_paps(dataset, dataloader, model, saved_dir, device, threshold=0.5):
             image_ids.append(dataset.image_ids[index])
 
             # print progress
-            print('{}/{}'.format(index, len(dataset)), end='\r')    
+#             print('{}/{}'.format(index, len(dataset)), end='\r')    
 
     if not len(results):
         print('No object detected')
