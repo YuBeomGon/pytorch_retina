@@ -90,12 +90,11 @@ def evaluate_paps(dataset, dataloader, model, saved_dir, device, threshold=0.5):
 
     if not len(results):
         print('No object detected')
+        return
     print('GT_results', len(GT_results))    
     print('pred_results', len(results))    
 
     # write output
-    os.remove(saved_dir + '{}_bbox_results.json'.format(dataset.set_name))
-    os.remove(saved_dir + '{}_GTbbox_results.json'.format(dataset.set_name))
     json.dump(results, open(saved_dir + '{}_bbox_results.json'.format(dataset.set_name), 'w'), indent=4)
     # write GT
     json.dump(GT_results, open(saved_dir + '{}_GTbbox_results.json'.format(dataset.set_name), 'w'), indent=4)     

@@ -29,7 +29,6 @@ def train_paps(dataloader, model, saved_dir, criterion,
     
     #for i, data in enumerate(tqdm(train_data_loader)) :
     train_data_loader = dataloader
-    retinanet = model
     if s_epoch == 0:
         Iou_low = [0.2]
         beta_list = [1.0]
@@ -61,7 +60,7 @@ def train_paps(dataloader, model, saved_dir, criterion,
             images = torch.cat(images).view(-1, c, h, w).to(device)
             targets = [ t.to(device) for t in targets]
 
-            outputs = retinanet([images, targets])
+            outputs = model([images, targets])
             classification, regression, anchors, annotations = (outputs)
             classification_loss, regression_loss = criterion(classification, regression, 
                                                              anchors, annotations, iou_thres,
@@ -80,13 +79,13 @@ def train_paps(dataloader, model, saved_dir, criterion,
 
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(retinanet.parameters(), 0.02)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.02)
             optimizer.step()   
 
         print('{}th epochs loss {} lr {} '.format(epoch, total_loss/(step+1), EPOCH_LEARING_RATE ))
         if loss_per_epoch > total_loss/(step+1):
             print('best model is saved')
-            torch.save(retinanet.state_dict(), saved_dir + 'best_model.pt')
+            torch.save(model.state_dict(), saved_dir + 'best_model.pt')
             loss_per_epoch = total_loss/(step+1)
 
         scheduler.step()
@@ -96,7 +95,7 @@ def train_paps(dataloader, model, saved_dir, criterion,
 
     state = {
         'epoch': epoch,
-        'state_dict': retinanet.state_dict(),
+        'state_dict': model.state_dict(),
         'optimizer': optimizer.state_dict(),
         'loss' : total_loss/(step+1)
     }
