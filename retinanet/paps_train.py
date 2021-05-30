@@ -46,6 +46,7 @@ def train_paps(dataloader, model, saved_dir, criterion,
 
         for step, data in enumerate(tk0) :
             if step > len(train_data_loader)/2 and epoch%10 > 0 :
+#             if step > len(train_data_loader)/4 :
                 break 
             if s_epoch == 0 :
                 iou_thres = np.random.uniform(low=Iou_low[epoch], high=0.5, size=None)
@@ -97,6 +98,7 @@ def train_paps(dataloader, model, saved_dir, criterion,
         'epoch': epoch,
         'state_dict': model.state_dict(),
         'optimizer': optimizer.state_dict(),
-        'loss' : total_loss/(step+1)
+        'loss' : total_loss/(step+1),
+        'scheduler' : scheduler.state_dict()
     }
-    torch.save(state, saved_dir + 'model.pt')
+    torch.save(state, saved_dir + 'epoch_' + str(e_epoch) +'_model.pt')

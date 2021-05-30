@@ -103,6 +103,7 @@ def main(args=None):
         ret_model.load_state_dict(state['state_dict'])
         optimizer.load_state_dict(state['optimizer'])
         last_loss = state['loss'] 
+        scheduler.load_state_dict(state['scheduler'])
     else :
         last_loss = 0.6 
     
