@@ -210,6 +210,7 @@ class PapsLoss(FocalLoss) :
     def __init__(self,device):
         super(PapsLoss, self).__init__(device)
 #         self.device = device    
+        self.cell_threshold = 0.5
 
     def forward(self, classifications, regressions, anchors, annotations, iou_threshold=0.3, beta=1.0):
 
@@ -289,6 +290,8 @@ class PapsLoss(FocalLoss) :
                 targets = targets.to(self.device)
 
             targets[torch.lt(IoU_max, iou_threshold), :] = 0
+            targets[classification[:,0] > 0.5] = -1
+            targets[classification[:,1] > 0.5] = -1
 
             positive_indices = torch.ge(IoU_max, iou_threshold + 0.1)
 
@@ -346,8 +349,10 @@ class PapsLoss(FocalLoss) :
 
                 targets_dx = (gt_ctr_x - anchor_ctr_x_pi) / anchor_widths_pi
                 targets_dy = (gt_ctr_y - anchor_ctr_y_pi) / anchor_heights_pi
-                targets_dw = torch.log(gt_widths / anchor_widths_pi)
-                targets_dh = torch.log(gt_heights / anchor_heights_pi)
+#                 targets_dw = torch.log(gt_widths / anchor_widths_pi)
+#                 targets_dh = torch.log(gt_heights / anchor_heights_pi)
+                targets_dw = (gt_widths / anchor_widths_pi)
+                targets_dh = (gt_heights / anchor_heights_pi)                
 
                 targets = torch.stack((targets_dx, targets_dy, targets_dw, targets_dh))
                 targets = targets.t()
