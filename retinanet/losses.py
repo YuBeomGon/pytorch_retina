@@ -207,12 +207,15 @@ class FocalLoss(nn.Module):
         return torch.stack(classification_losses).mean(dim=0, keepdim=True), torch.stack(regression_losses).mean(dim=0, keepdim=True), num_detected
 
 class PapsLoss(FocalLoss) :
-    def __init__(self,device):
+    def __init__(self,device, target_threshold, topk, filter_option):
         super(PapsLoss, self).__init__(device)
 #         self.device = device    
         self.cell_threshold = 0.5
+        self.target_threshold = float(target_threshold/10)
+        self.topk = topk
+        self.filter_option = filter_option    
 
-    def forward(self, classifications, regressions, anchors, annotations, iou_threshold=0.3, beta=1.0):
+    def forward(self, classifications, regressions, anchors, annotations, iou_threshold=0.5, beta=1.0):
 
         batch_size = classifications.shape[0]
         classification_losses = []
@@ -290,8 +293,17 @@ class PapsLoss(FocalLoss) :
                 targets = targets.to(self.device)
 
             targets[torch.lt(IoU_max, iou_threshold), :] = 0
-            targets[classification[:,0] > 0.5] = -1
-            targets[classification[:,1] > 0.5] = -1
+            
+            if int(self.filter_option) == 1 :
+                targets[classification[:,1] > self.target_threshold, 1] = -1
+            elif int(self.filter_option) == 2 :
+                topk_value = torch.topk(classification[:,1], self.topk)[0][self.topk-1]
+                targets[classification[:,1] > topk_value, 1] = -1
+            elif int(self.filter_option) == 3 :
+                topk_value = torch.topk(classification[:,1], self.topk)[0][self.topk-1]
+                if topk_value < self.target_threshold :
+                    topk_value = self.target_threshold
+                targets[classification[:,1] > topk_value, 1] = -1    
 
             positive_indices = torch.ge(IoU_max, iou_threshold + 0.1)
 
@@ -349,10 +361,10 @@ class PapsLoss(FocalLoss) :
 
                 targets_dx = (gt_ctr_x - anchor_ctr_x_pi) / anchor_widths_pi
                 targets_dy = (gt_ctr_y - anchor_ctr_y_pi) / anchor_heights_pi
-#                 targets_dw = torch.log(gt_widths / anchor_widths_pi)
-#                 targets_dh = torch.log(gt_heights / anchor_heights_pi)
-                targets_dw = (gt_widths / anchor_widths_pi)
-                targets_dh = (gt_heights / anchor_heights_pi)                
+                targets_dw = torch.log(gt_widths / anchor_widths_pi)
+                targets_dh = torch.log(gt_heights / anchor_heights_pi)
+#                 targets_dw = (gt_widths / anchor_widths_pi)
+#                 targets_dh = (gt_heights / anchor_heights_pi)                
 
                 targets = torch.stack((targets_dx, targets_dy, targets_dw, targets_dh))
                 targets = targets.t()
