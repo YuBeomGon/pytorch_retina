@@ -49,7 +49,7 @@ import torchvision.models as models
 def main(args=None):
     parser = argparse.ArgumentParser(description='Simple paps training script for training a RetinaNet network.')
     parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
-    parser.add_argument('--epochs', help='Number of epochs', type=int, default=200)
+    parser.add_argument('--learn_rate', help='learn_rate epochs', type=float, default=0.0008)
     parser.add_argument('--start_epoch', help='start_epoch', type=int, default=0)
     parser.add_argument('--end_epoch', help='end_epoch', type=int, default=200)
     parser.add_argument('--batch_size', help='Number of batchs', type=int, default=64)    
@@ -66,7 +66,7 @@ def main(args=None):
     
     parser = parser.parse_args(args)
     print('batch_size ', parser.batch_size)
-    print('epochs ', parser.epochs)
+    print('learn_rate ', parser.learn_rate)
     print( ' start_epoch {} end_epoch {}'.format(parser.start_epoch, parser.end_epoch))
     print('ismultigpu', parser.ismultigpu)
     print('freeze_ex_bn', parser.freeze_ex_bn )
@@ -99,7 +99,7 @@ def main(args=None):
     criterion = PapsLoss(device, parser.target_threshold, parser.topk, parser.filter_option)
     criterion = criterion.to(device)
     optimizer = optim.Adam(ret_model.parameters(), lr = 1e-7)
-    scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=20, T_mult=1, eta_max=0.0004,  T_up=5, gamma=0.5)    
+    scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=20, T_mult=2, eta_max=parser.learn_rate,  T_up=5, gamma=0.5)    
     
     saved_dir = parser.saved_dir
     if os.path.isfile(saved_dir+'model.pt') :
