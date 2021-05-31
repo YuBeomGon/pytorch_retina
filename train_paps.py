@@ -60,6 +60,9 @@ def main(args=None):
     parser.add_argument('--ismultigpu', help='multi gpu support', type=bool, default=False) 
     parser.add_argument('--freeze_ex_bn', help='freeze batch norm', type=bool, default=False) 
     parser.add_argument('--num_workers', help='cpu core', type=int, default=12) 
+    parser.add_argument('--target_threshold', help='target_threshold', type=int, default=7) 
+    parser.add_argument('--topk', help=' topk', type=int, default=20) 
+    parser.add_argument('--filter_option', help=' topk', type=int, default=1) 
     
     parser = parser.parse_args(args)
     print('batch_size ', parser.batch_size)
@@ -67,6 +70,7 @@ def main(args=None):
     print( ' start_epoch {} end_epoch {}'.format(parser.start_epoch, parser.end_epoch))
     print('ismultigpu', parser.ismultigpu)
     print('freeze_ex_bn', parser.freeze_ex_bn )
+    print('target_threshold {} topk {} filter_option {}'.format(parser.target_threshold, parser.topk, parser.filter_option))
 
     # GPU 할당 변경하기
     GPU_NUM = parser.gpu_num
@@ -92,7 +96,7 @@ def main(args=None):
     ret_model.load_state_dict(state_dict)
     
 #     criterion = FocalLoss(device)
-    criterion = PapsLoss(device)
+    criterion = PapsLoss(device, parser.target_threshold, parser.topk, parser.filter_option)
     criterion = criterion.to(device)
     optimizer = optim.Adam(ret_model.parameters(), lr = 1e-7)
     scheduler = CosineAnnealingWarmUpRestarts(optimizer, T_0=20, T_mult=1, eta_max=0.0004,  T_up=5, gamma=0.5)    
@@ -102,8 +106,8 @@ def main(args=None):
         state = torch.load(saved_dir + 'model.pt')
         ret_model.load_state_dict(state['state_dict'])
         optimizer.load_state_dict(state['optimizer'])
-        last_loss = state['loss'] 
         scheduler.load_state_dict(state['scheduler'])
+        last_loss = state['loss'] 
     else :
         last_loss = 0.6 
     
