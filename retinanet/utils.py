@@ -293,10 +293,10 @@ class BBoxTransform(nn.Module):
 
         pred_ctr_x = ctr_x + dx * widths
         pred_ctr_y = ctr_y + dy * heights
-#         pred_w     = torch.exp(dw) * widths
-#         pred_h     = torch.exp(dh) * heights
-        pred_w     = (dw) * widths
-        pred_h     = (dh) * heights        
+        pred_w     = torch.exp(dw) * widths
+        pred_h     = torch.exp(dh) * heights
+#         pred_w     = (dw) * widths
+#         pred_h     = (dh) * heights        
 
         pred_boxes_x1 = pred_ctr_x - 0.5 * pred_w
         pred_boxes_y1 = pred_ctr_y - 0.5 * pred_h
