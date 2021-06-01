@@ -80,7 +80,7 @@ def train_paps(dataloader, model, saved_dir, criterion,
 
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.02)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
             optimizer.step()   
 
         print('{}th epochs loss {} lr {} '.format(epoch, total_loss/(step+1), EPOCH_LEARING_RATE ))
