@@ -207,7 +207,7 @@ class FocalLoss(nn.Module):
         return torch.stack(classification_losses).mean(dim=0, keepdim=True), torch.stack(regression_losses).mean(dim=0, keepdim=True), num_detected
 
 class PapsLoss(FocalLoss) :
-    def __init__(self,device, target_threshold, topk, filter_option):
+    def __init__(self,device, target_threshold=0.9, topk=5, filter_option=4):
         super(PapsLoss, self).__init__(device)
 #         self.device = device    
         self.cell_threshold = 0.5
