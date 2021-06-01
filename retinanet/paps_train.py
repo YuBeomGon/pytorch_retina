@@ -101,4 +101,7 @@ def train_paps(dataloader, model, saved_dir, criterion,
         'loss' : total_loss/(step+1),
         'scheduler' : scheduler.state_dict()
     }
+    if os.path.isdir(saved_dir) == False :
+        print('saved_dir is made')
+        os.makedirs(saved_dir)    
     torch.save(state, saved_dir + 'epoch_' + str(e_epoch) +'_model.pt')
