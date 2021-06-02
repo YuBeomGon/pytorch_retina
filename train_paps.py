@@ -60,7 +60,7 @@ def main(args=None):
     parser.add_argument('--ismultigpu', help='multi gpu support', type=bool, default=False) 
     parser.add_argument('--freeze_ex_bn', help='freeze batch norm', type=bool, default=False) 
     parser.add_argument('--num_workers', help='cpu core', type=int, default=12) 
-    parser.add_argument('--target_threshold', help='target_threshold', type=int, default=7) 
+    parser.add_argument('--target_threshold', help='target_threshold', type=float, default=0.7) 
     parser.add_argument('--topk', help=' topk', type=int, default=20) 
     parser.add_argument('--filter_option', help=' topk', type=int, default=1) 
     

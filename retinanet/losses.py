@@ -211,7 +211,7 @@ class PapsLoss(FocalLoss) :
         super(PapsLoss, self).__init__(device)
 #         self.device = device    
         self.cell_threshold = 0.5
-        self.target_threshold = float(target_threshold/10)
+        self.target_threshold = target_threshold
         self.topk = topk
         self.filter_option = filter_option    
 
@@ -304,6 +304,10 @@ class PapsLoss(FocalLoss) :
                 if topk_value < self.target_threshold :
                     topk_value = self.target_threshold
                 targets[classification[:,1] > topk_value, 1] = -1    
+            elif int(self.filter_option) == 5 :
+                
+                targets[classification[:,1] > self.target_threshold, 1] = classification[classification[:,1] > self.target_threshold, 1] - self.target_threshold
+                targets[classification[:,0] > (self.target_threshold+0.2), 0] = classification[classification[:,0] > (self.target_threshold+0.2), 0] - (self.target_threshold+0.2)                
 
             positive_indices = torch.ge(IoU_max, iou_threshold + 0.1)
 
@@ -334,9 +338,9 @@ class PapsLoss(FocalLoss) :
             cls_loss = focal_weight * bce
 
             if torch.cuda.is_available():
-                cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros(cls_loss.shape).to(self.device))
+                cls_loss = torch.where(torch.ge(targets, -0.1), cls_loss, torch.zeros(cls_loss.shape).to(self.device))
             else:
-                cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros(cls_loss.shape))
+                cls_loss = torch.where(torch.ge(targets, -0.1), cls_loss, torch.zeros(cls_loss.shape))
 
             classification_losses.append(cls_loss.sum()/torch.clamp(num_positive_anchors.float(), min=1.0))
 
