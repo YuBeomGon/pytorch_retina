@@ -15,9 +15,12 @@ class Anchors(nn.Module):
         if sizes is None:
             self.sizes = [2 ** (x + 2) for x in self.pyramid_levels]
         if ratios is None:
-            self.ratios = np.array([1])
+#             self.ratios = np.array([1])
+            self.ratios = np.array([0.5, 0.75, 1, 1.25, 1.5])
         if scales is None:
-            self.scales = np.array([2 ** 0])
+            self.scales = np.array([2 ** (-1.0 / 3.0), 2 ** (-3.0 / 3.0), 2 ** 0, 2 ** (1.0 / 3.0) ])
+#         num anchors per feature map
+        self.num_anchors = len(self.ratios) * len(self.scales)
 
     def forward(self, image):
         
