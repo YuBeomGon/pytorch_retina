@@ -144,9 +144,11 @@ class HourglassNet(nn.Module):
 #         self.fc_ = nn.ModuleList(fc_)
 #         self.score_ = nn.ModuleList(score_)
         
-        self.regressionModel = RegressionModel(256)
-        self.classificationModel = ClassificationModel(256, num_classes=num_classes)
         self.anchors = Anchors()
+        print('num_anchors per feature map', self.anchors.num_anchors)
+
+        self.regressionModel = RegressionModel(256, num_anchors=self.anchors.num_anchors)
+        self.classificationModel = ClassificationModel(256, num_anchors=self.anchors.num_anchors, num_classes=num_classes)
         self.regressBoxes = BBoxTransform(device=self.device)
         self.clipBoxes = ClipBoxes()    
         

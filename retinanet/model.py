@@ -84,12 +84,13 @@ class ResNet(nn.Module):
             raise ValueError(f"Block type {block} not understood")
 
         self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2])
-        self.residualafterFPN = ResidualAfterFPN()       
-
-        self.regressionModel = RegressionModel(256)
-        self.classificationModel = ClassificationModel(256, num_classes=num_classes)
-
+        self.residualafterFPN = ResidualAfterFPN()     
+        
         self.anchors = Anchors()
+        print('num_anchors per feature map', self.anchors.num_anchors)
+
+        self.regressionModel = RegressionModel(256, num_anchors=self.anchors.num_anchors)
+        self.classificationModel = ClassificationModel(256, num_anchors=self.anchors.num_anchors, num_classes=num_classes)
 
         self.regressBoxes = BBoxTransform(device=self.device)
 
