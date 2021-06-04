@@ -48,7 +48,7 @@ class FocalLoss(nn.Module):
         self.alpha = 0.25
         self.gamma = 2.0   
 
-    def forward(self, classifications, regressions, anchors, annotations, iou_threshold=0.3):
+    def forward(self, classifications, regressions, anchors, annotations, iou_threshold=0.3, beta=1.0, pimages=None):
 
         batch_size = classifications.shape[0]
         classification_losses = []
@@ -213,9 +213,10 @@ class PapsLoss(FocalLoss) :
         self.cell_threshold = 0.5
         self.target_threshold = target_threshold
         self.topk = topk
-        self.filter_option = filter_option    
+        self.filter_option = filter_option   
+        self.pimage_thres = 0.55
 
-    def forward(self, classifications, regressions, anchors, annotations, iou_threshold=0.5, beta=1.0):
+    def forward(self, classifications, regressions, anchors, annotations, iou_threshold=0.5, beta=1.0, pimages=None):
 
         batch_size = classifications.shape[0]
         classification_losses = []
@@ -230,10 +231,13 @@ class PapsLoss(FocalLoss) :
         anchor_ctr_x   = anchor[:, 0] + 0.5 * anchor_widths
         anchor_ctr_y   = anchor[:, 1] + 0.5 * anchor_heights
         num_detected = 0
+        avg_foreground = []
+        avg_background = []
 
         for j in range(batch_size):
 
             classification = classifications[j, :, :]
+            pimage = pimages[j, :]
             regression = regressions[j, :, :]
 
 #             bbox_annotation = annotations[j, :, :]
@@ -278,7 +282,7 @@ class PapsLoss(FocalLoss) :
 
                 continue
 
-            IoU = paps_calc_iou(anchors[0, :, :], bbox_annotation[:, :4]) # num_anchors x num_annotations
+#             IoU = paps_calc_iou(anchors[0, :, :], bbox_annotation[:, :4]) # num_anchors x num_annotations
             IoU = calc_iou(anchors[0, :, :], bbox_annotation[:, :4])
 
             IoU_max, IoU_argmax = torch.max(IoU, dim=1) # num_anchors x 1
@@ -294,6 +298,7 @@ class PapsLoss(FocalLoss) :
 
             targets[torch.lt(IoU_max, iou_threshold), :] = 0
             
+#             loss filtering(1~3), label smoothing 5 and image filtering 6
             if int(self.filter_option) == 1 :
                 targets[classification[:,1] > self.target_threshold, 1] = -1
             elif int(self.filter_option) == 2 :
@@ -305,9 +310,16 @@ class PapsLoss(FocalLoss) :
                     topk_value = self.target_threshold
                 targets[classification[:,1] > topk_value, 1] = -1    
             elif int(self.filter_option) == 5 :
-                
                 targets[classification[:,1] > self.target_threshold, 1] = classification[classification[:,1] > self.target_threshold, 1] - self.target_threshold
-                targets[classification[:,0] > (self.target_threshold+0.2), 0] = classification[classification[:,0] > (self.target_threshold+0.2), 0] - (self.target_threshold+0.2)                
+                targets[classification[:,0] > (self.target_threshold+0.1), 0] = classification[classification[:,0] > (self.target_threshold+0.1), 0] - (self.target_threshold+0.1)  
+            elif int(self.filter_option) == 6 and pimage != None :
+#                 pimage[torch.lt(IoU_max, iou_threshold)]
+                if len(pimage[torch.lt(IoU_max, 0.1)]) > 0 :
+                    avg_background.extend(pimage[torch.lt(IoU_max, 0.1)])
+                if len(pimage[torch.ge(IoU_max, 0.9)]) > 0 :
+                    avg_foreground.extend(pimage[torch.ge(IoU_max, 0.9)])
+#                 print(pimage[torch.ge(IoU_max, 0.5)])
+                targets[pimage[:] < self.pimage_thres, :] = -1
 
             positive_indices = torch.ge(IoU_max, iou_threshold + 0.1)
 
@@ -394,5 +406,12 @@ class PapsLoss(FocalLoss) :
                     regression_losses.append(torch.tensor(0).float().to(self.device))
                 else:
                     regression_losses.append(torch.tensor(0).float())
-
-        return torch.stack(classification_losses).mean(dim=0, keepdim=True), torch.stack(regression_losses).mean(dim=0, keepdim=True), num_detected
+#         if len(avg_foreground) == 0:
+#             avg_fore= torch.zeros(1).to(self.device)
+#         else :
+#             avg_fore = sum(avg_foreground)/len(avg_foreground)
+#         if len(avg_background) == 0:
+#             avg_back = torch.zeros(1).to(self.device)
+#         else :
+#             avg_back = sum(avg_background)/len(avg_background)
+        return torch.stack(classification_losses).mean(dim=0, keepdim=True), torch.stack(regression_losses).mean(dim=0, keepdim=True), num_detected, avg_background, avg_foreground

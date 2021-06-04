@@ -1,24 +1,25 @@
 import numpy as np
 import torch
 import torch.nn as nn
-
+import torchvision
 
 class Anchors(nn.Module):
     def __init__(self, pyramid_levels=None, strides=None, sizes=None, ratios=None, scales=None):
         super(Anchors, self).__init__()
 
         if pyramid_levels is None:
-#             self.pyramid_levels = [3, 4, 5, 6, 7]
             self.pyramid_levels = [3]
+#             self.pyramid_levels = [3]
         if strides is None:
             self.strides = [2 ** x for x in self.pyramid_levels]
         if sizes is None:
             self.sizes = [2 ** (x + 2) for x in self.pyramid_levels]
         if ratios is None:
-#             self.ratios = np.array([1])
-            self.ratios = np.array([0.5, 0.75, 1, 1.25, 1.5])
+            self.ratios = np.array([1])
+#             self.ratios = np.array([0.5, 0.75, 1, 1.25, 1.5])
         if scales is None:
-            self.scales = np.array([2 ** (-1.0 / 3.0), 2 ** (-3.0 / 3.0), 2 ** 0, 2 ** (1.0 / 3.0) ])
+            self.scales = np.array([2 ** 0 ])
+#             self.scales = np.array([2 ** (-1.0 / 3.0), 2 ** (-3.0 / 3.0), 2 ** 0, 2 ** (1.0 / 3.0) ])
 #         num anchors per feature map
         self.num_anchors = len(self.ratios) * len(self.scales)
 
@@ -43,6 +44,25 @@ class Anchors(nn.Module):
 #         else:
 #             return torch.from_numpy(all_anchors.astype(np.float32))
         return torch.from_numpy(all_anchors.astype(np.float32))
+
+class PyramidImages(Anchors) :
+    def __init__(self):
+        super(PyramidImages, self).__init__()    
+        
+    def forward(self, images) :
+        pimages = []
+        images = [torchvision.transforms.ToPILImage()(x) for x in images]
+        images = [torchvision.transforms.Grayscale()(x) for x in images]
+        images = [torchvision.transforms.ToTensor()(x) for x in images]
+        images = torch.stack(images)        
+        batch_size = images.shape[0]
+        for l in self.pyramid_levels :
+            size = 2 ** (l + 2)
+#             pimages = nn.AvgPool2d((size, size), stride=(2**l, 2**l), padding=2**(l-1)*3)(images).mean(dim=1).view(batch_size, -1, 1)
+            images = nn.AvgPool2d((size, size), stride=(2**l, 2**l), padding=2**(l-1)*3)(images).view(batch_size, -1, 1)
+#             print(pimages.shape)
+            pimages.append(images)
+        return torch.cat(pimages, dim=1).squeeze(dim=2)
 
 def generate_anchors(base_size=16, ratios=None, scales=None):
     """
