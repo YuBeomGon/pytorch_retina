@@ -214,7 +214,7 @@ class PapsLoss(FocalLoss) :
         self.target_threshold = target_threshold
         self.topk = topk
         self.filter_option = filter_option   
-        self.pimage_thres = 0.55
+        self.pimage_thres = 0.4
 
     def forward(self, classifications, regressions, anchors, annotations, iou_threshold=0.5, beta=1.0, pimages=None):
 
@@ -237,7 +237,10 @@ class PapsLoss(FocalLoss) :
         for j in range(batch_size):
 
             classification = classifications[j, :, :]
-            pimage = pimages[j, :]
+            if pimages != None :
+                pimage = pimages[j, :]
+            else :
+                pimage = None
             regression = regressions[j, :, :]
 
 #             bbox_annotation = annotations[j, :, :]
@@ -314,11 +317,12 @@ class PapsLoss(FocalLoss) :
                 targets[classification[:,0] > (self.target_threshold+0.1), 0] = classification[classification[:,0] > (self.target_threshold+0.1), 0] - (self.target_threshold+0.1)  
             elif int(self.filter_option) == 6 and pimage != None :
 #                 pimage[torch.lt(IoU_max, iou_threshold)]
-                if len(pimage[torch.lt(IoU_max, 0.1)]) > 0 :
-                    avg_background.extend(pimage[torch.lt(IoU_max, 0.1)])
-                if len(pimage[torch.ge(IoU_max, 0.9)]) > 0 :
-                    avg_foreground.extend(pimage[torch.ge(IoU_max, 0.9)])
+#                if len(pimage[torch.lt(IoU_max, 0.1)]) > 0 :
+#                    avg_background.extend(pimage[torch.lt(IoU_max, 0.1)])
+#                if len(pimage[torch.ge(IoU_max, 0.9)]) > 0 :
+#                    avg_foreground.extend(pimage[torch.ge(IoU_max, 0.9)])
 #                 print(pimage[torch.ge(IoU_max, 0.5)])
+# forground case
                 targets[pimage[:] < self.pimage_thres, :] = -1
 
             positive_indices = torch.ge(IoU_max, iou_threshold + 0.1)

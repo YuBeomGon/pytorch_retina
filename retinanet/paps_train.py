@@ -17,7 +17,7 @@ from retinanet import csv_eval
 from retinanet.scheduler import *
 from retinanet.losses import *
 from retinanet.dataloader import *
-from retinanet.anchors import Anchors
+from retinanet.anchors import Anchors, PyramidImages
 
 import albumentations as A
 import albumentations.pytorch
@@ -25,7 +25,7 @@ import time
 from tqdm import tqdm
 
 def train_paps(dataloader, model, saved_dir, criterion,
-                  optimizer, scheduler, device, s_epoch=0, e_epoch=160, last_loss=0.6):
+                  optimizer, scheduler, device, s_epoch=0, e_epoch=160, last_loss=0.6, ispimage=False):
     
     #for i, data in enumerate(tqdm(train_data_loader)) :
     train_data_loader = dataloader
@@ -58,14 +58,18 @@ def train_paps(dataloader, model, saved_dir, criterion,
             batch_size = len(images)
 
             c, h, w = images[0].shape
+            if ispimage :
+                pimages = PyramidImages()(images).to(device)
+            else :
+                pimages = None
             images = torch.cat(images).view(-1, c, h, w).to(device)
             targets = [ t.to(device) for t in targets]
 
             outputs = model([images, targets])
             classification, regression, anchors, annotations = (outputs)
-            classification_loss, regression_loss, num_det = criterion(classification, regression, 
+            classification_loss, regression_loss, num_det, _, _ = criterion(classification, regression, 
                                                              anchors, annotations, iou_thres,
-                                                             beta)
+                                                             beta, pimages)
 
             classification_loss = classification_loss.mean()
             regression_loss = regression_loss.mean()

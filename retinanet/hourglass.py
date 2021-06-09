@@ -11,7 +11,7 @@ import torch.nn.functional as F
 import math
 from torch.hub import load_state_dict_from_url
 from retinanet.utils import RegressionModel, ClassificationModel, BBoxTransform, ClipBoxes
-from retinanet.anchors import Anchors
+from retinanet.anchors import Anchors, PyramidImages
 from retinanet import losses
 from retinanet.model import predict
 
@@ -146,6 +146,7 @@ class HourglassNet(nn.Module):
         
         self.anchors = Anchors()
         print('num_anchors per feature map', self.anchors.num_anchors)
+        self.imagepyramid = PyramidImages()
 
         self.regressionModel = RegressionModel(256, num_anchors=self.anchors.num_anchors)
         self.classificationModel = ClassificationModel(256, num_anchors=self.anchors.num_anchors, num_classes=num_classes)

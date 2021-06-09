@@ -125,12 +125,12 @@ def evaluate_paps(dataset, dataloader, model, saved_dir, device, threshold=0.5):
     coco_eval.accumulate()
     coco_eval.summarize()   
     
-#     print("******************Normal*********************")
-#     coco_eval = COCOeval(coco_gt, coco_pred, 'bbox')
-#     coco_eval.params.imgIds = image_ids
-#     coco_eval.params.catIds = [1]
-#     coco_eval.evaluate()
-#     coco_eval.accumulate()
-#     coco_eval.summarize()  
+    print("******************Normal*********************")
+    coco_eval = COCOeval(coco_gt, coco_pred, 'bbox')
+    coco_eval.params.imgIds = image_ids
+    coco_eval.params.catIds = [1]
+    coco_eval.evaluate()
+    coco_eval.accumulate()
+    coco_eval.summarize()  
 
     model.train()
